@@ -1,9 +1,11 @@
 # openbaopy
-OpenBao Client library to authenticate and perform several OpenBao api actions.
+OpenBao Client library to authenticate and perform several OpenBao api actions. (Linted with flake8 and pylint)
+
+[![project-linting](https://github.com/PortalMario/openbaopy/actions/workflows/linting.yml/badge.svg)](https://github.com/PortalMario/openbaopy/actions/workflows/linting.yml)
 
 # Install
 ```
-pip install git+https://github.com/PortalMario/openbaopy.git
+pip install git+https://github.com/PortalMario/openbaopy.git@v1.0.0
 ```
 
 # Basic Usage
@@ -11,14 +13,18 @@ If the socket path is set during object instantiation, a preinstalled, authentic
 
 ### Approle Auth
 ```python
-from openbaopy.bao import Bao
+import sys
+from openbaopy.bao import Bao, BaoAuthParams
 
-bao_ip_address = "127.0.0.1"
-bao_role_id = "xxxxxxxx"
-bao_secret_id = "xxxxxxxx"
+auth_params = BaoAuthParams(
+    bao_address="127.0.0.1",
+    verify=True,
+    role_id='xxxxx-xxxx-xxxx-xxx',
+    secret_id='xxxxx-xxxx-xxxx-xxx'
+)
 
 try:
-    bao_client = Bao(bao_ip=bao_ip_address, verify=False, role_id=bao_role_id, secret_id=bao_secret_id)
+    bao_client = Bao(auth_params=auth_params)
 except Exception as ex:
     print(f'Could not connect to openbao: { bao_ip_address } - { ex }')
     sys.exit(1)
@@ -26,14 +32,18 @@ except Exception as ex:
 
 ### Unix Socket Auth
 ```python
-from openbaopy.bao import Bao
+import sys
+from openbaopy.bao import Bao, BaoAuthParams
 
-bao_socket_path = "/etc/bao/bao-agent.sock"
+auth_params = BaoAuthParams(
+    socket_path="/etc/bao/bao-agent.sock",
+    verify=False
+)
 
 try:
-    bao_client = Bao(verify=False, socket_path=bao_socket_path)
+    bao_client = Bao(auth_params=auth_params)
 except Exception as ex:
-    print(f'Could not connect to openbao: { bao_socket_path } - { ex }')
+    print(f'Could not connect to openbao: { bao_ip_address } - { ex }')
     sys.exit(1)
 ```
 
@@ -45,7 +55,12 @@ except Exception as ex:
 server_fqdn = "mycool.server.com"
 
 try:
-    response = bao_client.generate_certificate(common_name=server_fqdn, pki="mycool-ca", pki_role="mycool-ca-role")
+    response = bao_client.generate_certificate(
+        common_name=server_fqdn,
+        pki="mycool-ca",
+        pki_role="mycool-ca-role"
+        )
+
     print(response)
 except Exception as ex:
     print(f'Could not genereate cert: {ex}')

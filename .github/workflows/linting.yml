@@ -1,0 +1,23 @@
+name: project-linting
+run-name: 'Project linting'
+on:
+  push:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        linter: [flake8, pylint]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install ${{ matrix.linter }} .
+
+      - name: Lint Code
+        run: ${{ matrix.linter }} ./openbaopy

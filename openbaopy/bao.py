@@ -1,70 +1,100 @@
-import urllib3
-import urllib.parse
+"""
+OpenBao Client library to authenticate and perform several OpenBao api actions.
+"""
 import os
+import urllib.parse
+from dataclasses import dataclass
+import urllib3
 import requests_unixsocket
 from hvac import Client
+import hvac.exceptions
+from openbaopy import exceptions
+
+
+@dataclass
+class BaoAuthParams:
+    """
+    Attributes:
+        bao_address (str): IPv4 Address or FQDN of OpenBao Server.
+        self.__auth_params.verify (bool): Whether TLS Verification
+            should be ignored.
+        role_id (str): OpenBao approle role_id for authentification.
+        secret_id (str): OpenBao approle secret_id for authentification.
+        self.__auth_params.socket_path (str): Filesystem Path to
+            openbao agent unix socket. If set, approle value will be ignored.
+    """
+    bao_address: str | None = None
+    verify: bool = True
+    role_id: str | None = None
+    secret_id: str | None = None
+    socket_path: str | None = None
+
 
 class Bao:
     """
     OpenBao Client.
-
-    Attributes:
-        bao_address (str): IPv4 Address or FQDN of OpenBao Server.
-        verify (bool): Whether TLS Verification should be ignored.
-        role_id (str): OpenBao approle role_id for authentification.
-        secret_id (str): OpenBao approle secret_id for authentification.
-        socket_path (str): Filesystem Path to openbao agent unix socket. If set, approle value will be ignored.
     """
-    def __init__(self, bao_address: str | None = None, verify: bool = True, role_id: str | None = None, secret_id: str | None = None, socket_path: str | None = None):
+    def __init__(self, auth_params: BaoAuthParams):
         """
         Initialize a new OpenBao client instance.
 
         Args:
-            bao_address (str): IPv4 Address or FQDN of OpenBao Server.
-            verify (bool): Whether TLS Verification should be ignored.
-            role_id (str): OpenBao approle role_id for authentification.
-            secret_id (str): OpenBao approle secret_id for authentification.
-            socket_path (str): Filesystem Path to openbao agent unix socket. If set, approle value will be ignored.
+            auth_params (BaoAuthParams): Params needed for openbao server auth.
 
         Raises:
-            Exception: OpenBao server authentication error.
+            FileNotFoundError: Socket path does not exist.
+            PermissionError: Socket path is not writable.
+            hvac.exceptions.Unauthorized: OpenBao server authentication error.
         """
+
+        self.__auth_params: BaoAuthParams = auth_params
+
         # Disable insecure tls warnings
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        if self.__auth_params.verify is False:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         # Use socket
-        if socket_path:
-            if not os.path.exists(socket_path) or not os.access(socket_path, os.W_OK):
-                raise Exception(f'Socket path does not exist or is not writable: { socket_path }')
+        if self.__auth_params.socket_path:
+            if not os.path.exists(self.__auth_params.socket_path):
+                raise FileNotFoundError('Socket path does not exist: ' +
+                                        self.__auth_params.socket_path)
 
-            self.__socket_url: str = 'http+unix://{encoded_path}'.format(
-                encoded_path=urllib.parse.quote(socket_path, safe='')
+            if not os.access(self.__auth_params.socket_path, os.W_OK):
+                raise PermissionError('Socket path is not writable: ' +
+                                      self.__auth_params.socket_path)
+
+            encoded_path = urllib.parse.quote(
+                self.__auth_params.socket_path,
+                safe=''
                 )
-            
-            self.__socket_session = requests_unixsocket.Session()
+            socket_url: str = f'http+unix://{encoded_path}'
+
+            socket_session = requests_unixsocket.Session()
             self.__bao_client: Client = Client(
-                url=self.__socket_url,
-                session=self.__socket_session,
-                verify=verify
+                url=socket_url,
+                session=socket_session,
+                verify=self.__auth_params.verify
             )
 
         # Use approle directly
         else:
-            self.__bao_address: str = bao_address
-            self.__role_id: str = role_id
-            self.__secret_id: str = secret_id
+            bao_address: str = self.__auth_params.bao_address
+            role_id: str = self.__auth_params.role_id
+            secret_id: str = self.__auth_params.secret_id
 
             self.__bao_client: Client = Client(
-                url=f'https://{self.__bao_address}:8200',
-                verify=verify
+                url=f'https://{bao_address}:8200',
+                verify=self.__auth_params.verify
             )
 
-            self.__bao_client.auth.approle.login(role_id=self.__role_id, secret_id=self.__secret_id)
+            self.__bao_client.auth.approle.login(
+                role_id=role_id,
+                secret_id=secret_id
+                )
 
             # Check for authentification
             if not self.__bao_client.is_authenticated():
-                raise Exception(f'Cloud not authenticate to bao server!')
-        
+                raise hvac.exceptions.Unauthorized('Cloud not authenticate to bao server!')
 
     def generate_certificate(self, common_name: str, pki: str, pki_role: str) -> dict:
         """
@@ -79,7 +109,7 @@ class Bao:
             dict: Generated Cert, Key, Serial and CA-Chain
 
         Raises:
-            Exception: Error during certificate generation.
+            exceptions.UnexpectedError: Error during certificate generation.
         """
         try:
             response = self.__bao_client.secrets.pki.generate_certificate(
@@ -89,30 +119,33 @@ class Bao:
             )
             return response['data']
         except Exception as ex:
-            raise Exception(f'Could not generate new cert for: {common_name} - {ex}')
-    
+            raise exceptions.UnexpectedError(
+                f'Could not generate new cert for: {common_name} - {ex}'
+                ) from ex
+
     def revoke_certificate(self, serial_number: str, pki: str) -> dict:
         """
         Revoke a certificate.
 
         Args:
-            serial_number (str): Serial number of the certificate which should be revoked.
+            serial_number (str): Serial number of the certificate which
+                should be revoked.
             pki (str): The CA/PKI mount which issued the certificate.
 
         Returns:
             dict: Information of the revocation.
 
         Raises:
-            Exception: If serial_number is empty.
-            Exception: If serial_number contains wildcards.
-            Exception: Error during certificate revocation.
+            ValueError: If serial_number is empty.
+            ValueError: If serial_number contains wildcards.
+            exceptions.UnexpectedError: Error during certificate revocation.
         """
-        if not serial_number or len(serial_number) < 0:
-            raise Exception('serial_number is empty')
-        
+        if not serial_number or len(serial_number) < 1:
+            raise ValueError('serial_number is empty')
+
         if '*' in serial_number:
-            raise Exception(f'Wildcard found in serial_number: { serial_number }')
-        
+            raise ValueError(f'Wildcard found in serial_number: {serial_number}')
+
         try:
             response = self.__bao_client.secrets.pki.revoke_certificate(
                 serial_number=serial_number,
@@ -120,8 +153,7 @@ class Bao:
             )
             return response['data']
         except Exception as ex:
-            raise Exception(f'Could not revoke certificate: {ex}')
-
+            raise exceptions.UnexpectedError(f'Could not revoke certificate: {ex}') from ex
 
     def get_secret(self, path: str, key: str, secrets_mount: str = 'secret') -> str:
         """
@@ -136,7 +168,7 @@ class Bao:
             str: Value to the secret's key.
 
         Raises:
-            Exception: Error during secret retrieval.
+            exceptions.UnexpectedError: Error during secret retrieval.
         """
         try:
             response = self.__bao_client.secrets.kv.v1.read_secret(
@@ -145,4 +177,6 @@ class Bao:
             )
             return response['data']['data'][key]
         except Exception as ex:
-            raise Exception(f'Could not retrieve secret value for: {key} - {ex}')
+            raise exceptions.UnexpectedError(
+                f'Could not retrieve secret value for: {key} - {ex}'
+                ) from ex

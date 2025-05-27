@@ -96,12 +96,13 @@ class Bao:
             if not self.__bao_client.is_authenticated():
                 raise hvac.exceptions.Unauthorized('Cloud not authenticate to bao server!')
 
-    def generate_certificate(self, common_name: str, pki: str, pki_role: str) -> dict:
+    def generate_certificate(self, common_name: str, ttl: str, pki: str, pki_role: str) -> dict:
         """
         Generate new signed x509 certificate.
 
         Args:
             common_name (str): The Certificates desired Common Name.
+            ttl (str): The certificates desired expiration e.g: 72h.
             pki (str): The CA/PKI mount to issue new certificates.
             pki_role (str): The desired openbao pki role.
 
@@ -115,6 +116,7 @@ class Bao:
             response = self.__bao_client.secrets.pki.generate_certificate(
                 name=pki_role,
                 common_name=common_name,
+                ttl=ttl,
                 mount_point=pki
             )
             return response['data']

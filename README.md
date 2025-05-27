@@ -26,7 +26,7 @@ auth_params = BaoAuthParams(
 try:
     bao_client = Bao(auth_params=auth_params)
 except Exception as ex:
-    print(f'Could not connect to openbao: { bao_ip_address } - { ex }')
+    print(f'Could not connect to openbao: { auth_params.bao_address } - { ex }')
     sys.exit(1)
 ```
 
@@ -43,7 +43,7 @@ auth_params = BaoAuthParams(
 try:
     bao_client = Bao(auth_params=auth_params)
 except Exception as ex:
-    print(f'Could not connect to openbao: { bao_ip_address } - { ex }')
+    print(f'Could not connect to openbao: { ex }')
     sys.exit(1)
 ```
 
@@ -58,6 +58,7 @@ try:
     response = bao_client.generate_certificate(
         common_name=server_fqdn,
         pki="mycool-ca",
+        ttl="72h",
         pki_role="mycool-ca-role"
         )
 

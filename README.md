@@ -5,7 +5,7 @@ OpenBao Client library to authenticate and perform several OpenBao api actions. 
 
 # Install
 ```
-pip install git+https://github.com/PortalMario/openbaopy.git@v1.0.1
+pip install git+https://github.com/PortalMario/openbaopy.git@v1.0.2
 ```
 
 # Basic Usage

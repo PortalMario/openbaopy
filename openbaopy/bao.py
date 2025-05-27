@@ -116,7 +116,7 @@ class Bao:
             response = self.__bao_client.secrets.pki.generate_certificate(
                 name=pki_role,
                 common_name=common_name,
-                ttl=ttl,
+                extra_params={'ttl': ttl},
                 mount_point=pki
             )
             return response['data']

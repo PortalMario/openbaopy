@@ -4,6 +4,7 @@ OpenBao Client library to authenticate and perform several OpenBao api actions.
 import os
 import urllib.parse
 from dataclasses import dataclass
+import requests
 import urllib3
 import requests_unixsocket
 from hvac import Client
@@ -87,10 +88,12 @@ class Bao:
                 verify=self.__auth_params.verify
             )
 
-            self.__bao_client.auth.approle.login(
+            self.__login_response = self.__bao_client.auth.approle.login(
                 role_id=role_id,
                 secret_id=secret_id
                 )
+
+            self.__bao_token = self.__bao_client.adapter.get_login_token(self.__login_response)
 
             # Check for authentification
             if not self.__bao_client.is_authenticated():
@@ -156,6 +159,31 @@ class Bao:
             return response['data']
         except Exception as ex:
             raise exceptions.UnexpectedError(f'Could not revoke certificate: {ex}') from ex
+
+    def list_certs_details(self, pki: str) -> dict:
+        """
+        List all certs and thier details.
+
+        Args:
+            pki (str): The CA/PKI mount which issued the certificate.
+
+        Returns:
+            dict: Found certs and thier information.
+
+        Raises:
+            exceptions.UnexpectedError: Error during certificate listing.
+        """
+
+        try:
+            certs = requests.get(
+                timeout=20,
+                url=f"https://{self.__auth_params.bao_address}:8200/v1/{pki}/certs/detailed",
+                headers={"X-Vault-Token": f"{self.__bao_token}"},
+                params={"list": "true", "detailed": "true"}, verify=False).json()
+
+            return certs
+        except Exception as ex:
+            raise exceptions.UnexpectedError(f'Could not list detailed certificates: {ex}') from ex
 
     def get_secret(self, path: str, key: str, secrets_mount: str = 'secret') -> str:
         """

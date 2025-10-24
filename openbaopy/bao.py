@@ -68,11 +68,11 @@ class Bao:
                 self.__auth_params.socket_path,
                 safe=''
                 )
-            socket_url: str = f'http+unix://{encoded_path}'
+            self.__socket_url: str = f'http+unix://{encoded_path}'
 
             socket_session = requests_unixsocket.Session()
             self.__bao_client: Client = Client(
-                url=socket_url,
+                url=self.__socket_url,
                 session=socket_session,
                 verify=self.__auth_params.verify
             )
@@ -175,6 +175,16 @@ class Bao:
         """
 
         try:
+            if self.__auth_params.socket_path:
+                session = requests_unixsocket.Session()
+                url = f"{self.__socket_url}/v1/{pki}/certs/detailed"
+                certs = session.get(
+                    url=url,
+                    params={"list": "true", "detailed": "true"},
+                    verify=False).json()
+
+                return certs
+
             certs = requests.get(
                 timeout=20,
                 url=f"https://{self.__auth_params.bao_address}:8200/v1/{pki}/certs/detailed",
